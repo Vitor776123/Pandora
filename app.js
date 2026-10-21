@@ -68,6 +68,10 @@ const ICON = {
   chevL: '<path d="m15 6-6 6 6 6"/>',
   chevR: '<path d="m9 6 6 6-6 6"/>',
   link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  alert: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.8v5M12 16.2v.1"/>',
+  checkc: '<circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.3 2.5 2.5 4.5-5"/>',
+  pencil: '<path d="M4 20l1-4L16.5 4.5a2 2 0 0 1 3 3L8 19z"/><path d="M14.5 6.5l3 3"/>',
 };
 const ico = (n) => `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[n]}</svg>`;
 
@@ -311,31 +315,31 @@ function vHoje() {
     </div>
     <div class="bento">
       <section class="b-card b-agenda" style="--i:0" aria-labelledby="b-ag">
-        <header class="b-head"><h2 id="b-ag" class="b-title">Agenda de hoje<span class="count">${ms.length}</span></h2><button class="btn ghost sm" data-act="new-meeting">${ico('plus')}Reunião</button></header>
+        <header class="b-head"><h2 id="b-ag" class="b-title">${ico('cal')}Agenda de hoje<span class="count">${ms.length}</span></h2><button class="btn ghost sm" data-act="new-meeting">${ico('plus')}Reunião</button></header>
         ${nextHtml}
-        ${ms.length ? ms.map((m) => meetRow(m)).join('') : `<div class="empty">Nenhuma reunião registrada hoje.<br><button class="btn" data-act="new-meeting">${ico('plus')}Abrir caderno de reunião</button></div>`}
+        ${ms.length ? ms.map((m) => meetRow(m)).join('') : `<div class="empty center"><span class="empty-ico">${ico('cal')}</span><b>Nenhuma reunião registrada hoje</b><span>Abra o caderno quando a próxima começar.</span><button class="btn" data-act="new-meeting">${ico('plus')}Abrir caderno de reunião</button></div>`}
       </section>
       <section class="b-card b-stats" style="--i:1" aria-labelledby="b-st">
-        <header class="b-head"><h2 id="b-st" class="b-title">Panorama</h2></header>
+        <header class="b-head"><h2 id="b-st" class="b-title">${ico('chart')}Panorama</h2></header>
         <div class="stats">
-          <button class="stat" data-act="goto" data-route="calendario"><b>${ms.length}</b><span>${ms.length === 1 ? 'reunião hoje' : 'reuniões hoje'}</span></button>
-          <button class="stat" data-act="goto" data-route="tarefas"><b>${todays.length}</b><span>${todays.length === 1 ? 'prazo hoje' : 'prazos hoje'}</span></button>
-          <button class="stat ${late.length ? 'warn' : ''}" data-act="goto" data-route="tarefas"><b>${late.length}</b><span>${late.length === 1 ? 'atrasada' : 'atrasadas'}</span></button>
-          <button class="stat ok" data-act="goto" data-route="tarefas"><b>${doneWeek}</b><span>${doneWeek === 1 ? 'concluída em 7 dias' : 'concluídas em 7 dias'}</span></button>
+          <button class="stat st-cal" data-act="goto" data-route="calendario"><b>${ms.length}</b><span class="st-ico">${ico('cal')}</span><span class="st-l">${ms.length === 1 ? 'reunião hoje' : 'reuniões hoje'}</span></button>
+          <button class="stat st-clock" data-act="goto" data-route="tarefas"><b>${todays.length}</b><span class="st-ico">${ico('clock')}</span><span class="st-l">${todays.length === 1 ? 'prazo hoje' : 'prazos hoje'}</span></button>
+          <button class="stat st-alert ${late.length ? 'warn' : ''}" data-act="goto" data-route="tarefas"><b>${late.length}</b><span class="st-ico">${ico('alert')}</span><span class="st-l">${late.length === 1 ? 'atrasada' : 'atrasadas'}</span></button>
+          <button class="stat st-ok ok" data-act="goto" data-route="tarefas"><b>${doneWeek}</b><span class="st-ico">${ico('checkc')}</span><span class="st-l">${doneWeek === 1 ? 'concluída em 7 dias' : 'concluídas em 7 dias'}</span></button>
         </div>
       </section>
       <section class="b-card b-tasks" style="--i:2" aria-labelledby="b-tk">
-        <header class="b-head"><h2 id="b-tk" class="b-title">Prazos</h2><button class="link" data-act="goto" data-route="tarefas">Ver tarefas</button></header>
+        <header class="b-head"><h2 id="b-tk" class="b-title">${ico('clock')}Prazos</h2><button class="link" data-act="goto" data-route="tarefas">Ver tarefas${ico('arrowR')}</button></header>
         ${group('Atrasadas', L, 'late')}${group('Para hoje', T)}${group('Próximos 7 dias', N)}
         ${hidden ? `<p class="b-more">e mais ${pl(hidden, 'prazo', 'prazos')}. <button class="link" data-act="goto" data-route="tarefas">Abrir quadro</button></p>` : ''}
         ${!late.length && !todays.length && !soon.length ? `<div class="empty">Sem prazos nos próximos 7 dias.<br><button class="btn" data-act="new-task">${ico('plus')}Nova tarefa</button></div>` : ''}
       </section>
       <section class="b-card b-diary" style="--i:3" aria-labelledby="b-di">
-        <header class="b-head"><h2 id="b-di" class="b-title">Diário de hoje</h2><span class="save-state diary-state"></span></header>
+        <header class="b-head"><h2 id="b-di" class="b-title">${ico('pencil')}Diário de hoje</h2><span class="save-state diary-state"></span></header>
         <textarea class="ruled" data-diary="${t}" rows="6" aria-label="Diário de hoje" placeholder="O que você fez hoje? Anote aqui e vira histórico para o relatório.">${esc(entry?.content || '')}</textarea>
       </section>
       <section class="b-card b-quick" style="--i:4" aria-labelledby="b-qk">
-        <header class="b-head"><h2 id="b-qk" class="b-title">Acesso rápido</h2></header>
+        <header class="b-head"><h2 id="b-qk" class="b-title">${ico('bolt')}Acesso rápido</h2></header>
         <div class="qlist">
           <button class="q" data-act="new-meeting">${ico('note')}<span>Nova reunião</span><kbd>${esc(k('Alt N'))}</kbd></button>
           <button class="q" data-act="new-task">${ico('check')}<span>Nova tarefa</span></button>
@@ -344,7 +348,7 @@ function vHoje() {
         </div>
       </section>
       <section class="b-card b-proj" style="--i:5" aria-labelledby="b-pj">
-        <header class="b-head"><h2 id="b-pj" class="b-title">Projetos<span class="count">${S.projects.length}</span></h2><button class="link" data-act="goto" data-route="projetos">Ver todos</button></header>
+        <header class="b-head"><h2 id="b-pj" class="b-title">${ico('layers')}Projetos<span class="count">${S.projects.length}</span></h2><button class="link" data-act="goto" data-route="projetos">Ver todos${ico('arrowR')}</button></header>
         ${projs.length ? `<div class="pj-grid">${projCards}</div>` : `<div class="empty">Nenhum projeto cadastrado.<br><button class="btn" data-act="new-project">${ico('plus')}Novo projeto</button></div>`}
       </section>
     </div>
@@ -735,7 +739,7 @@ function vTarefas() {
   const tasks = S.tasks.filter((t) => !S.boardProject || t.project_id === S.boardProject);
   const lanes = STATUSES.map((st) => {
     const arr = tasks.filter((t) => t.status === st).sort((a, b) => (a.due_date || '9999').localeCompare(b.due_date || '9999'));
-    return `<div class="lane" data-status="${st}">
+    return `<div class="lane" data-status="${st}" style="--c:${SCOLOR[st]}">
       <div class="lane-head" style="--c:${SCOLOR[st]}">${esc(st)}<span class="count">${arr.length}</span></div>
       ${arr.map((x) => {
         const p = byId(S.projects, x.project_id);
@@ -896,7 +900,7 @@ function vDiario() {
           <h2 class="cap">${esc(fmtLong(sel))}</h2>
           <div class="head-actions"><span class="save-state diary-state"></span><input type="date" data-bind="diary-date" value="${sel}" style="width:auto" aria-label="Escolher data"></div>
         </div>
-        <textarea class="ruled" data-diary="${sel}" rows="12" placeholder="Escreva o que fez neste dia.">${esc(entry?.content || '')}</textarea>
+        <div class="pane"><textarea class="ruled" data-diary="${sel}" rows="12" placeholder="Escreva o que fez neste dia.">${esc(entry?.content || '')}</textarea></div>
         ${(ms.length || doneT.length) ? `<div class="day-extra">
           ${ms.length ? `<div class="group-title">Reuniões do dia<span class="muted">${ms.length}</span></div>${ms.map((m) => meetRow(m)).join('')}` : ''}
           ${doneT.length ? `<div class="group-title">Tarefas concluídas neste dia<span class="muted">${doneT.length}</span></div>${doneT.map(taskRow).join('')}` : ''}
@@ -981,7 +985,7 @@ function vRelatorios() {
           <button class="btn" data-act="rep-generate">Gerar rascunho do mês</button>
           <button class="btn ghost" data-act="rep-open-gestao">${ico('chart')}Ver na Gestão</button>
         </div>
-        <textarea class="ruled report-area" data-rep="content" rows="16" placeholder="Escreva o relatório ou use Gerar rascunho do mês.">${esc(rep?.content || '')}</textarea>
+        <div class="pane"><textarea class="ruled report-area" data-rep="content" rows="16" placeholder="Escreva o relatório ou use Gerar rascunho do mês.">${esc(rep?.content || '')}</textarea></div>
       </div>
     </div>
   </section>`;
