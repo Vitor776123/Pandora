@@ -597,10 +597,10 @@ body::before {
 @container (max-width: 250px) { .q kbd { display: none; } }
 
 .pj-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
-.pj { text-align: left; display: grid; gap: 10px; padding: 14px 16px; background: var(--raised); border: 1px solid var(--line-soft); border-radius: 12px; color: var(--text); transition: border-color 0.15s, transform 0.15s var(--ease); }
+.pj { min-width: 0; overflow: hidden; text-align: left; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 14px 16px; background: var(--raised); border: 1px solid var(--line-soft); border-radius: 12px; color: var(--text); transition: border-color 0.15s, transform 0.15s var(--ease); }
 .pj:hover { border-color: var(--line); transform: translateY(-1px); }
-.pj-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.pj-top b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pj-top { display: grid; gap: 6px; min-width: 0; }
+.pj-top b { font-weight: 500; min-width: 0; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: anywhere; }
 .pj .bar { display: block; margin: 0; }
 .pj-sub { color: var(--muted); font-size: 13px; }
 
