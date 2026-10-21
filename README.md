@@ -64,3 +64,4 @@ todas com RLS ligada. As migrações já foram aplicadas no projeto Supabase.
 Quando quiser, dá para ligar um provedor com plano gratuito por uma função serverless na Vercel
 (a chave da IA fica no servidor, nunca no navegador). Confira a política de dados do provedor
 antes de enviar conteúdo de trabalho.
+
