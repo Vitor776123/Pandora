@@ -43,6 +43,39 @@ function debounce(fn, ms) {
 }
 const autosize = (t) => { t.style.height = 'auto'; t.style.height = `${t.scrollHeight + 2}px`; };
 
+/* =========================================================
+   Cores do tema: um botão no topo, cada clique passa para a próxima.
+   Para criar outra cor, acrescente aqui e um bloco :root[data-theme="..."] no styles.css.
+   ========================================================= */
+const THEMES = [
+  { id: 'esmeralda', label: 'Esmeralda', bg: '#030a0d' },
+  { id: 'rubi', label: 'Rubi', bg: '#0b0305' },
+  { id: 'ouro', label: 'Ouro', bg: '#080603' },
+  { id: 'prata', label: 'Prata', bg: '#070a0f' },
+];
+const THEME_KEY = 'pandora-theme';
+let themeId = THEMES[0].id, themeSync = false;
+const themeById = (id) => THEMES.find((t) => t.id === id);
+const saveThemeRemote = debounce(async (id) => {
+  if (!themeSync) return;
+  try { await sb.auth.updateUser({ data: { theme: id } }); } catch (e) { /* sem rede: vale só neste aparelho */ }
+}, 900);
+function applyTheme(id, { save = true, remote = true } = {}) {
+  const t = themeById(id) || THEMES[0];
+  themeId = t.id;
+  document.documentElement.setAttribute('data-theme', t.id);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', t.bg);
+  const b = document.getElementById('theme-btn');
+  if (b) { b.title = `Trocar a cor (agora: ${t.label})`; b.setAttribute('aria-label', `Trocar a cor do tema. Agora: ${t.label}`); }
+  if (save) {
+    try { localStorage.setItem(THEME_KEY, t.id); } catch (e) { /* sem armazenamento local */ }
+    if (remote) saveThemeRemote(t.id);
+  }
+}
+const nextTheme = () => applyTheme(THEMES[(THEMES.findIndex((t) => t.id === themeId) + 1) % THEMES.length].id);
+(() => { let v = null; try { v = localStorage.getItem(THEME_KEY); } catch (e) { /* ignora */ } applyTheme(v, { save: false }); })();
+
 const ICON = {
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/>',
   cal: '<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
@@ -72,6 +105,7 @@ const ICON = {
   alert: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.8v5M12 16.2v.1"/>',
   checkc: '<circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.3 2.5 2.5 4.5-5"/>',
   pencil: '<path d="M4 20l1-4L16.5 4.5a2 2 0 0 1 3 3L8 19z"/><path d="M14.5 6.5l3 3"/>',
+  palette: '<path d="M12 3.5a8.5 8.5 0 1 0 0 17c1.2 0 1.8-.8 1.8-1.7 0-.5-.2-.9-.5-1.3-.3-.4-.5-.8-.5-1.3 0-.9.7-1.6 1.6-1.6H17a3.5 3.5 0 0 0 3.5-3.5C20.5 6.9 16.7 3.5 12 3.5z"/><circle cx="7.8" cy="11.2" r=".9"/><circle cx="10.2" cy="7.6" r=".9"/><circle cx="14.6" cy="7.6" r=".9"/>',
 };
 const ico = (n) => `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[n]}</svg>`;
 
@@ -1224,6 +1258,7 @@ function getCommands() {
     { id: 'go-links', group: 'Ir para', title: 'Gestão: links por projeto', hint: 'Links principais de cada projeto', icon: 'link', keys: 'gestao anexos', more: true, leaveNb: true, run: () => { S.gesTab = 'links'; go('gestao'); } },
     { id: 'print', group: 'Sistema', title: 'Exportar relatório de gestão (PDF)', icon: 'print', keys: 'imprimir pdf supervisao', more: true, leaveNb: true, run: () => { S.gesTab = 'relatorio'; go('gestao'); setTimeout(() => ACTIONS['ges-print'](), 450); } },
     { id: 'backup', group: 'Sistema', title: 'Baixar backup (JSON)', icon: 'download', keys: 'exportar dados', more: true, run: () => ACTIONS['export-backup']() },
+    { id: 'theme', group: 'Sistema', title: 'Trocar a cor do tema', hint: `Agora: ${themeById(themeId).label}. Cada uso passa para a próxima`, icon: 'palette', keys: 'tema cor aparencia visual esmeralda rubi ouro prata vermelho dourado verde', more: true, run: () => nextTheme() },
     { id: 'account', group: 'Sistema', title: 'Conta e senha', icon: 'user', keys: 'trocar senha perfil', more: true, run: () => openAccount() },
     { id: 'logout', group: 'Sistema', title: 'Sair', icon: 'exit', keys: 'logout desconectar', more: true, run: () => ACTIONS.logout() },
   );
@@ -1364,6 +1399,7 @@ const ACTIONS = {
   'reload': () => location.reload(),
   'open-search': () => openPalette(),
   'goto': (el) => go(el.dataset.route),
+  'theme-next': () => nextTheme(),
   'new-meeting': (el) => { closeModal(); openNotebook(null, { date: el.dataset.date }); },
   'open-meeting': (el) => { closeModal(); if (NB) { nbSettle().then(() => { closeNotebook(); openNotebook(el.dataset.id); }); } else openNotebook(el.dataset.id); },
   'cal-prev': () => { const c = S.cal; const d = new Date(c.y, c.m - 1, 1); S.cal = { ...c, y: d.getFullYear(), m: d.getMonth() }; render(false); },
@@ -1671,6 +1707,10 @@ async function doLogin() {
 }
 async function enter(user) {
   S.user = user;
+  themeSync = true;
+  const remoteTheme = user?.user_metadata?.theme;
+  if (themeById(remoteTheme)) { if (remoteTheme !== themeId) applyTheme(remoteTheme, { remote: false }); }
+  else if (themeId !== THEMES[0].id) saveThemeRemote(themeId);
   try { await reload(); }
   catch (e) {
     console.error(e);
