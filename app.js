@@ -73,6 +73,65 @@ function applyTheme(id, { save = true, remote = true } = {}) {
     if (remote) saveThemeRemote(t.id);
   }
 }
+const MOTION_KEY = 'pandora-motion';
+let motionOn = true, motionChosen = false;
+const saveMotionRemote = debounce(async (on) => {
+  if (!themeSync) return;
+  try { await sb.auth.updateUser({ data: { motion: on ? 'on' : 'off' } }); } catch (e) { /* sem rede: vale só neste aparelho */ }
+}, 900);
+/* luzes que percorrem as curvas: o script as conduz a ~20 quadros por segundo (o movimento é lento, não se nota)
+   e assim o vidro desfocado dos cartões é recalculado 3x menos do que numa animação de 60 quadros */
+const FLOW_STEP = 1000 / 20 - 2;
+const FLOW_LEN = { w: 16, m: 10, c: 5 }; // tamanho do rastro de cada camada (em % da curva)
+const flowSmall = window.matchMedia ? window.matchMedia('(max-width: 820px)') : { matches: false };
+let flowRaf = 0, flowLast = 0;
+function flowTick(t) {
+  flowRaf = requestAnimationFrame(flowTick);
+  if (t - flowLast < FLOW_STEP) return;
+  flowLast = t;
+  const gs = document.querySelectorAll(document.body.classList.contains('nb-open') ? '.nb-flow .pl' : '#flow .pl');
+  const max = Math.min(gs.length, flowSmall.matches ? 5 : gs.length), s = t / 1000;
+  for (let i = 0; i < max; i++) {
+    const g = gs[i];
+    const p = ((((s - +g.dataset.o) / +g.dataset.d) % 1) + 1) % 1; // posição no ciclo, 0..1
+    g.style.opacity = p < 0.1 ? p * 10 : p > 0.9 ? (1 - p) * 10 : 1;
+    const c = -8 + 116 * p; // centro da luz ao longo da curva (começa e termina fora da tela)
+    for (const path of g.children) path.setAttribute('stroke-dashoffset', (FLOW_LEN[path.getAttribute('class')] / 2 - c).toFixed(2));
+  }
+}
+function flowSync() {
+  const run = motionOn && !document.hidden;
+  if (run && !flowRaf) flowRaf = requestAnimationFrame(flowTick);
+  else if (!run && flowRaf) { cancelAnimationFrame(flowRaf); flowRaf = 0; }
+}
+function applyMotion(on, { save = true, remote = true } = {}) {
+  motionOn = !!on;
+  document.documentElement.setAttribute('data-motion', motionOn ? 'on' : 'off');
+  flowSync();
+  const b = document.getElementById('motion-btn');
+  if (b) {
+    b.setAttribute('aria-pressed', String(motionOn));
+    b.title = `Movimento do fundo: ${motionOn ? 'ligado' : 'desligado'}`;
+    b.setAttribute('aria-label', `Movimento do fundo: ${motionOn ? 'ligado. Clique para desligar' : 'desligado. Clique para ligar'}`);
+  }
+  if (save) {
+    motionChosen = true;
+    try { localStorage.setItem(MOTION_KEY, motionOn ? 'on' : 'off'); } catch (e) { /* sem armazenamento local */ }
+    if (remote) saveMotionRemote(motionOn);
+  }
+}
+const toggleMotion = () => applyMotion(!motionOn);
+(() => {
+  let v = null, reduce = false;
+  try { v = localStorage.getItem(MOTION_KEY); } catch (e) { /* ignora */ }
+  try { reduce = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { /* ignora */ }
+  motionChosen = v === 'on' || v === 'off';
+  applyMotion(motionChosen ? v === 'on' : !reduce, { save: false });
+  document.addEventListener('visibilitychange', flowSync);
+})();
+// o caderno de reunião cobre a tela e tem o seu próprio fundo: leva uma cópia das luzes
+const flowMarkup = () => { const f = document.getElementById('flow'); return f ? f.outerHTML.replace(' id="flow"', '').replace('class="flow"', 'class="flow nb-flow"') : ''; };
+
 const nextTheme = () => applyTheme(THEMES[(THEMES.findIndex((t) => t.id === themeId) + 1) % THEMES.length].id);
 (() => { let v = null; try { v = localStorage.getItem(THEME_KEY); } catch (e) { /* ignora */ } applyTheme(v, { save: false }); })();
 
@@ -105,6 +164,7 @@ const ICON = {
   alert: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.8v5M12 16.2v.1"/>',
   checkc: '<circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.3 2.5 2.5 4.5-5"/>',
   pencil: '<path d="M4 20l1-4L16.5 4.5a2 2 0 0 1 3 3L8 19z"/><path d="M14.5 6.5l3 3"/>',
+  waves: '<path d="M3 8.5c3-3.2 6 3.2 9 0s6 3.2 9 0"/><path d="M3 15.5c3-3.2 6 3.2 9 0s6 3.2 9 0"/>',
   palette: '<path d="M12 3.5a8.5 8.5 0 1 0 0 17c1.2 0 1.8-.8 1.8-1.7 0-.5-.2-.9-.5-1.3-.3-.4-.5-.8-.5-1.3 0-.9.7-1.6 1.6-1.6H17a3.5 3.5 0 0 0 3.5-3.5C20.5 6.9 16.7 3.5 12 3.5z"/><circle cx="7.8" cy="11.2" r=".9"/><circle cx="10.2" cy="7.6" r=".9"/><circle cx="14.6" cy="7.6" r=".9"/>',
 };
 const ico = (n) => `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[n]}</svg>`;
@@ -579,6 +639,7 @@ function renderNotebook(flip = 0) {
       <section class="nb-sec"><h3>Ações e prazos</h3><div id="nb-actions"></div></section>
     </article>
   </div>`;
+  nb.insertAdjacentHTML('afterbegin', flowMarkup());
   renderNbActions();
   $$('textarea', nb).forEach(autosize);
   if (flip) { nb.classList.add('open'); $('.paper', nb).classList.add(flip < 0 ? 'flip-prev' : 'flip-next'); }
@@ -1259,6 +1320,7 @@ function getCommands() {
     { id: 'print', group: 'Sistema', title: 'Exportar relatório de gestão (PDF)', icon: 'print', keys: 'imprimir pdf supervisao', more: true, leaveNb: true, run: () => { S.gesTab = 'relatorio'; go('gestao'); setTimeout(() => ACTIONS['ges-print'](), 450); } },
     { id: 'backup', group: 'Sistema', title: 'Baixar backup (JSON)', icon: 'download', keys: 'exportar dados', more: true, run: () => ACTIONS['export-backup']() },
     { id: 'theme', group: 'Sistema', title: 'Trocar a cor do tema', hint: `Agora: ${themeById(themeId).label}. Cada uso passa para a próxima`, icon: 'palette', keys: 'tema cor aparencia visual esmeralda rubi ouro prata vermelho dourado verde', more: true, run: () => nextTheme() },
+    { id: 'motion', group: 'Sistema', title: motionOn ? 'Desligar o movimento do fundo' : 'Ligar o movimento do fundo', hint: 'Luzes suaves que percorrem as curvas do fundo', icon: 'waves', keys: 'movimento animacao animado fundo curvas luzes parar pausar ligar desligar', more: true, run: () => toggleMotion() },
     { id: 'account', group: 'Sistema', title: 'Conta e senha', icon: 'user', keys: 'trocar senha perfil', more: true, run: () => openAccount() },
     { id: 'logout', group: 'Sistema', title: 'Sair', icon: 'exit', keys: 'logout desconectar', more: true, run: () => ACTIONS.logout() },
   );
@@ -1400,6 +1462,7 @@ const ACTIONS = {
   'open-search': () => openPalette(),
   'goto': (el) => go(el.dataset.route),
   'theme-next': () => nextTheme(),
+  'motion-toggle': () => toggleMotion(),
   'new-meeting': (el) => { closeModal(); openNotebook(null, { date: el.dataset.date }); },
   'open-meeting': (el) => { closeModal(); if (NB) { nbSettle().then(() => { closeNotebook(); openNotebook(el.dataset.id); }); } else openNotebook(el.dataset.id); },
   'cal-prev': () => { const c = S.cal; const d = new Date(c.y, c.m - 1, 1); S.cal = { ...c, y: d.getFullYear(), m: d.getMonth() }; render(false); },
@@ -1711,6 +1774,9 @@ async function enter(user) {
   const remoteTheme = user?.user_metadata?.theme;
   if (themeById(remoteTheme)) { if (remoteTheme !== themeId) applyTheme(remoteTheme, { remote: false }); }
   else if (themeId !== THEMES[0].id) saveThemeRemote(themeId);
+  const remoteMotion = user?.user_metadata?.motion;
+  if (remoteMotion === 'on' || remoteMotion === 'off') { if ((remoteMotion === 'on') !== motionOn) applyMotion(remoteMotion === 'on', { remote: false }); }
+  else if (motionChosen) saveMotionRemote(motionOn);
   try { await reload(); }
   catch (e) {
     console.error(e);
