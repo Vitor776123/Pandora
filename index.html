@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pandora</title>
+<meta name="theme-color" content="#11151c">
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2311151c'/%3E%3Crect x='7' y='9' width='18' height='15' rx='3' fill='none' stroke='%23cdb27a' stroke-width='2'/%3E%3Cpath d='M7 14.5h18' stroke='%23cdb27a' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div id="boot" class="boot" aria-live="polite">
+  <div class="boot-mark"></div>
+</div>
+
+<main id="login" class="login" hidden>
+  <form id="login-form" class="login-card" autocomplete="on">
+    <div class="brand brand-lg"><span class="mark" aria-hidden="true"></span><span class="brand-name">Pandora</span></div>
+    <p class="login-sub">Seu centro de comando. Entre para continuar.</p>
+    <label>E-mail
+      <input type="email" name="email" id="login-email" required autocomplete="username" inputmode="email">
+    </label>
+    <label>Senha
+      <input type="password" name="password" id="login-pass" required autocomplete="current-password">
+    </label>
+    <p id="login-error" class="form-error" role="alert" hidden></p>
+    <button class="btn primary block" id="login-btn" type="submit">Entrar</button>
+  </form>
+</main>
+
+<div id="app" hidden>
+  <aside id="nav" aria-label="Navegação principal"></aside>
+  <div id="stage">
+    <header id="topbar">
+      <div class="brand brand-sm"><span class="mark" aria-hidden="true"></span><span class="brand-name">Pandora</span></div>
+      <button class="search-btn" data-act="open-search" aria-label="Buscar">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
+        <span class="search-text">Buscar ou executar um comando</span>
+        <kbd>Ctrl K</kbd>
+      </button>
+    </header>
+    <div id="view"></div>
+  </div>
+</div>
+
+<div id="notebook" class="notebook" hidden></div>
+<div id="overlay" class="overlay" hidden></div>
+<div id="palette" class="palette" hidden></div>
+<div id="qc" class="qc" hidden></div>
+<datalist id="owners"></datalist>
+<div id="toasts" class="toasts" aria-live="polite"></div>
+
+<noscript><p style="padding:2rem;color:#e8eaee">O Pandora precisa de JavaScript para funcionar.</p></noscript>
+
+<script src="vendor/supabase.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
