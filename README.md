@@ -22,14 +22,30 @@ Atalhos: `Ctrl + K` (`⌘ K` no Mac) abre a paleta: busca em tudo (aceita datas 
 
 ## Visual
 
-Superfícies que flutuam (barra superior, menu lateral aberto, paleta, janelas, captura rápida) usam vidro
-translúcido com desfoque. Áreas de leitura (caderno, relatórios) ficam sólidas. Quem pede menos transparência
-no sistema, ou navegadores sem suporte, recebem fundos sólidos. Os valores ficam nos tokens `--glass-*` do `styles.css`.
+Visual **vidro**: fundo escuro com curvas luminosas, cartões de vidro translúcido com borda brilhante, ícones nos
+blocos do Hoje e quadro de tarefas com colunas coloridas por status. Áreas de escrita (caderno, diário, relatórios)
+ficam mais firmes para a leitura. Quem pede menos transparência no sistema, ou navegadores sem suporte a desfoque,
+recebem fundos sólidos. A impressão da Gestão (PDF) continua branca e limpa em qualquer cor.
+
+**Cores:** o botão de paleta, no canto superior esquerdo, troca para a próxima cor a cada clique
+(Esmeralda, Rubi, Ouro, Prata). A escolha fica guardada no aparelho e na sua conta, então vale em todos os dispositivos.
+Também dá para trocar pela busca (`Ctrl + K`, digite "cor do tema").
+
+Para criar uma cor nova: copie um bloco `:root[data-theme="..."]` no início do `styles.css`, troque os valores
+e acrescente a cor na lista `THEMES` do `app.js`. Os tokens `--glass-*` e `--s-*` (status) valem para todas.
+
+**Movimento do fundo:** luzes suaves percorrem as curvas do fundo, bem devagar (ciclos de 36 a 60 segundos). O botão de
+ondas, ao lado do botão de cores, liga e desliga o movimento (a escolha também fica no aparelho e na conta). Quem usa
+"reduzir movimento" no sistema já começa com ele desligado, mas pode ligar. O movimento pausa sozinho quando a aba fica
+em segundo plano e, no celular, usa menos luzes. Também dá para alternar pela busca (`Ctrl + K`, digite "movimento").
+As curvas animadas ficam no `<svg id="flow">` do `index.html` (cada `<g class="pl">` é uma luz, com `data-d` = duração em
+segundos e `data-o` = defasagem); quem as move é o `app.js` (`flowTick`, ~20 quadros por segundo, para poupar o vidro
+desfocado dos cartões).
 
 ## Publicar (GitHub + Vercel)
 
 1. Crie um repositório no GitHub e envie estes arquivos (`index.html`, `app.js`, `styles.css`,
-   `config.js`, `vercel.json`, pasta `vendor/`).
+   `theme-boot.js`, `config.js`, `vercel.json`, pasta `vendor/`).
 2. Na Vercel: **Add New > Project**, escolha o repositório e clique em **Deploy**.
    Não precisa de build nem de variáveis de ambiente (framework: *Other*).
 3. Abra o endereço gerado e entre com seu e-mail e senha.
@@ -64,4 +80,3 @@ todas com RLS ligada. As migrações já foram aplicadas no projeto Supabase.
 Quando quiser, dá para ligar um provedor com plano gratuito por uma função serverless na Vercel
 (a chave da IA fica no servidor, nunca no navegador). Confira a política de dados do provedor
 antes de enviar conteúdo de trabalho.
-
