@@ -16,7 +16,13 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const pad = (n) => String(n).padStart(2, '0');
 const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const parseYmd = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
-const todayStr = () => ymd(new Date());
+const TZ = 'America/Sao_Paulo';
+const tzDate = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
+const tzTime = new Intl.DateTimeFormat('pt-BR', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+// Data (ano-mês-dia) de um instante no fuso de São Paulo: uma tarefa concluída às 22h não cai no dia seguinte por causa do UTC.
+const localDateOf = (iso) => { try { return tzDate.format(new Date(iso)); } catch (e) { return ymd(new Date(iso)); } };
+const localTimeOf = (iso) => { try { return tzTime.format(new Date(iso)); } catch (e) { return ''; } };
+const todayStr = () => localDateOf(Date.now());
 const addDays = (s, n) => { const d = parseYmd(s); d.setDate(d.getDate() + n); return ymd(d); };
 const MONTHS = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
 const WEEKDAYS = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
@@ -28,7 +34,6 @@ const monthOf = (s) => String(s).slice(0, 7);
 const monthLabel = (k) => { const [y, m] = k.split('-').map(Number); return `${MONTHS[m - 1]} de ${y}`; };
 const nowHM = () => { const d = new Date(); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
 const hm = (t) => (t ? String(t).slice(0, 5) : '');
-const localDateOf = (iso) => ymd(new Date(iso));
 const norm = (s) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const pl = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const byId = (arr, id) => arr.find((x) => x.id === id);
@@ -66,8 +71,7 @@ function applyTheme(id, { save = true, remote = true } = {}) {
   document.documentElement.setAttribute('data-theme', t.id);
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute('content', t.bg);
-  const b = document.getElementById('theme-btn');
-  if (b) { b.title = `Trocar a cor (agora: ${t.label})`; b.setAttribute('aria-label', `Trocar a cor do tema. Agora: ${t.label}`); }
+  syncFab();
   if (save) {
     try { localStorage.setItem(THEME_KEY, t.id); } catch (e) { /* sem armazenamento local */ }
     if (remote) saveThemeRemote(t.id);
@@ -108,12 +112,7 @@ function applyMotion(on, { save = true, remote = true } = {}) {
   motionOn = !!on;
   document.documentElement.setAttribute('data-motion', motionOn ? 'on' : 'off');
   flowSync();
-  const b = document.getElementById('motion-btn');
-  if (b) {
-    b.setAttribute('aria-pressed', String(motionOn));
-    b.title = `Movimento do fundo: ${motionOn ? 'ligado' : 'desligado'}`;
-    b.setAttribute('aria-label', `Movimento do fundo: ${motionOn ? 'ligado. Clique para desligar' : 'desligado. Clique para ligar'}`);
-  }
+  syncFab();
   if (save) {
     motionChosen = true;
     try { localStorage.setItem(MOTION_KEY, motionOn ? 'on' : 'off'); } catch (e) { /* sem armazenamento local */ }
@@ -164,7 +163,7 @@ const ICON = {
   alert: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.8v5M12 16.2v.1"/>',
   checkc: '<circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.3 2.5 2.5 4.5-5"/>',
   pencil: '<path d="M4 20l1-4L16.5 4.5a2 2 0 0 1 3 3L8 19z"/><path d="M14.5 6.5l3 3"/>',
-  waves: '<path d="M3 8.5c3-3.2 6 3.2 9 0s6 3.2 9 0"/><path d="M3 15.5c3-3.2 6 3.2 9 0s6 3.2 9 0"/>',
+  waves: '<path d="M3 8.5c3-3.2 6 3.2 9 0s6 3.2 9 0"/><path d="M3 15.5c3-3.2 6 3.2 9 0s6 3.2 9 0"/><path class="slash" d="M5 20 19 4"/>',
   palette: '<path d="M12 3.5a8.5 8.5 0 1 0 0 17c1.2 0 1.8-.8 1.8-1.7 0-.5-.2-.9-.5-1.3-.3-.4-.5-.8-.5-1.3 0-.9.7-1.6 1.6-1.6H17a3.5 3.5 0 0 0 3.5-3.5C20.5 6.9 16.7 3.5 12 3.5z"/><circle cx="7.8" cy="11.2" r=".9"/><circle cx="10.2" cy="7.6" r=".9"/><circle cx="14.6" cy="7.6" r=".9"/>',
 };
 const ico = (n) => `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[n]}</svg>`;
@@ -319,16 +318,18 @@ function refreshUI() {
 /* =========================================================
    Componentes de lista
    ========================================================= */
-function taskRow(x) {
+function taskRow(x, inDay = false) {
   const proj = byId(S.projects, x.project_id);
   const late = !isDone(x.status) && x.due_date && x.due_date < todayStr();
   return `<div class="row ${isDone(x.status) ? 'is-done' : ''}" data-act="open-task" data-id="${x.id}" tabindex="0" role="button">
     <button class="check ${isDone(x.status) ? 'on' : ''}" data-act="complete-task" data-id="${x.id}" aria-label="${isDone(x.status) ? 'Reabrir tarefa' : 'Marcar como feita'}"></button>
     <div class="row-main"><div class="row-title">${esc(x.title)}</div>${proj || x.owner ? `<div class="row-sub">${[proj && esc(proj.name), x.owner && `Resp.: ${esc(x.owner)}`].filter(Boolean).join(' · ')}</div>` : ''}</div>
     ${pill(x.status)}
-    <span class="due ${late ? 'late' : ''}">${x.due_date ? fmtShort(x.due_date) : 'sem prazo'}</span>
+    <span class="due ${late ? 'late' : ''}">${inDay && isDone(x.status) && x.completed_at ? `feita ${esc(localTimeOf(x.completed_at))}` : x.due_date ? `${inDay ? 'prazo ' : ''}${fmtShort(x.due_date)}` : 'sem prazo'}</span>
   </div>`;
 }
+// Dia a que uma tarefa pertence no Diário: concluída → data de conclusão (fuso de São Paulo), ou o prazo se não houver; pendente → prazo.
+const taskDay = (t) => (isDone(t.status) ? (t.completed_at ? localDateOf(t.completed_at) : t.due_date) : t.due_date) || '';
 function meetRow(m, showDate = false) {
   const proj = byId(S.projects, m.project_id);
   const n = S.tasks.filter((t) => t.meeting_id === m.id).length;
@@ -982,7 +983,8 @@ function vDiario() {
   const entry = S.diary.find((d) => d.entry_date === sel);
   const days = S.diary.filter((d) => d.content.trim()).slice(0, 80);
   const ms = S.meetings.filter((m) => m.meeting_date === sel);
-  const doneT = S.tasks.filter((t) => isDone(t.status) && t.completed_at && localDateOf(t.completed_at) === sel);
+  const doneT = S.tasks.filter((t) => isDone(t.status) && taskDay(t) === sel);
+  const dueT = S.tasks.filter((t) => !isDone(t.status) && taskDay(t) === sel);
   return `<section class="page">
     <div class="page-head"><div><h1>Diário</h1><p class="page-sub">O que você fez em cada dia. Esse histórico alimenta o relatório mensal.</p></div>
       <div class="head-actions"><button class="btn" data-act="diary-goto" data-date="${todayStr()}">Ir para hoje</button></div></div>
@@ -996,10 +998,12 @@ function vDiario() {
           <div class="head-actions"><span class="save-state diary-state"></span><input type="date" data-bind="diary-date" value="${sel}" style="width:auto" aria-label="Escolher data"></div>
         </div>
         <div class="pane"><textarea class="ruled" data-diary="${sel}" rows="12" placeholder="Escreva o que fez neste dia.">${esc(entry?.content || '')}</textarea></div>
-        ${(ms.length || doneT.length) ? `<div class="day-extra">
+        <div class="day-extra" id="day-extra">
           ${ms.length ? `<div class="group-title">Reuniões do dia<span class="muted">${ms.length}</span></div>${ms.map((m) => meetRow(m)).join('')}` : ''}
-          ${doneT.length ? `<div class="group-title">Tarefas concluídas neste dia<span class="muted">${doneT.length}</span></div>${doneT.map(taskRow).join('')}` : ''}
-        </div>` : ''}
+          ${doneT.length ? `<div class="group-title">Tarefas concluídas neste dia<span class="muted">${doneT.length}</span></div>${doneT.map((t) => taskRow(t, true)).join('')}` : ''}
+          ${dueT.length ? `<div class="group-title">Tarefas pendentes com prazo neste dia<span class="muted">${dueT.length}</span></div>${dueT.map((t) => taskRow(t, true)).join('')}` : ''}
+          ${doneT.length || dueT.length ? '' : '<p class="muted small day-none">Nenhuma tarefa neste dia.</p>'}
+        </div>
       </div>
     </div>
   </section>`;
@@ -1142,15 +1146,15 @@ function gesRelatorio(key) {
       </section>
       <section>
         <h2>Reuniões do mês</h2>
-        ${ms.length ? ms.map((m) => `<div class="item"><div class="item-top"><span class="dt">${fmtShort(m.meeting_date)}</span><span class="t">${esc(m.title)}</span><span class="r">${esc(m.kind)}</span></div>${firstLine(m.decisions) ? `<p>${esc(m.decisions.trim())}</p>` : ''}</div>`).join('') : '<p class="muted">Nenhuma reunião registrada neste mês.</p>'}
+        ${ms.length ? ms.map((m) => `<div class="item"><div class="item-top"><span class="dt">${fmtShort(m.meeting_date)}</span><span class="t">${esc(m.title)}</span><span class="st">${esc(m.kind)}</span></div>${firstLine(m.decisions) ? `<p>${esc(m.decisions.trim())}</p>` : ''}</div>`).join('') : '<p class="muted">Nenhuma reunião registrada neste mês.</p>'}
       </section>
       <section>
         <h2>Entregas concluídas no mês</h2>
-        ${doneT.length ? doneT.map((x) => { const p = byId(S.projects, x.project_id); return `<div class="item"><div class="item-top"><span class="dt">${fmtShort(localDateOf(x.completed_at))}</span><span class="t">${esc(x.title)}</span><span class="r">${p ? esc(p.name) : ''} ${pill(x.status)}</span></div></div>`; }).join('') : '<p class="muted">Nenhuma tarefa concluída neste mês.</p>'}
+        ${doneT.length ? doneT.map((x) => { const p = byId(S.projects, x.project_id); return `<div class="item"><div class="item-top has-pj"><span class="dt">${fmtShort(localDateOf(x.completed_at))}</span><span class="st">${pill(x.status)}</span><span class="t">${esc(x.title)}</span>${p ? `<span class="pj">${esc(p.name)}</span>` : ''}</div></div>`; }).join('') : '<p class="muted">Nenhuma tarefa concluída neste mês.</p>'}
       </section>
       <section>
         <h2>Pendências em aberto</h2>
-        ${open.length ? open.slice(0, 25).map((x) => { const p = byId(S.projects, x.project_id); const lt = x.due_date && x.due_date < t; return `<div class="item"><div class="item-top"><span class="dt">${x.due_date ? fmtShort(x.due_date) : '--/--'}</span><span class="t">${esc(x.title)}</span><span class="r" style="${lt ? 'color:var(--danger)' : ''}">${lt ? 'Prazo vencido' : (x.due_date ? 'No prazo' : 'Sem prazo')} ${pill(x.status)}</span></div>${p ? `<p>${esc(p.name)}</p>` : ''}</div>`; }).join('') : '<p class="muted">Nenhuma pendência em aberto.</p>'}
+        ${open.length ? open.slice(0, 25).map((x) => { const p = byId(S.projects, x.project_id); const lt = x.due_date && x.due_date < t; return `<div class="item"><div class="item-top"><span class="dt">${x.due_date ? fmtShort(x.due_date) : '--/--'}</span><span class="t">${esc(x.title)}</span><span class="st" style="${lt ? 'color:var(--danger)' : ''}">${lt ? 'Prazo vencido' : (x.due_date ? 'No prazo' : 'Sem prazo')} ${pill(x.status)}</span></div>${p ? `<p>${esc(p.name)}</p>` : ''}</div>`; }).join('') : '<p class="muted">Nenhuma pendência em aberto.</p>'}
       </section>
       ${gesLinksDoc()}
       ${rep && rep.content.trim() ? `<section><h2>Resumo do mês</h2><div class="prose">${esc(rep.content)}</div></section>` : ''}
@@ -1461,8 +1465,12 @@ const ACTIONS = {
   'reload': () => location.reload(),
   'open-search': () => openPalette(),
   'goto': (el) => go(el.dataset.route),
-  'theme-next': () => nextTheme(),
-  'motion-toggle': () => toggleMotion(),
+  'fab-toggle': () => fabSet(!QC.menu),
+  'fab-capture': () => { fabSet(false); qcSet(true); },
+  'fab-new-meeting': async () => { fabSet(false); if (NB) { await nbSettle(); closeNotebook(); } openNotebook(null); },
+  'fab-new-task': () => { fabSet(false); openTask(null); },
+  'fab-theme': () => { nextTheme(); fabSet(false, { focus: true }); },
+  'fab-motion': () => { toggleMotion(); fabSet(false, { focus: true }); },
   'new-meeting': (el) => { closeModal(); openNotebook(null, { date: el.dataset.date }); },
   'open-meeting': (el) => { closeModal(); if (NB) { nbSettle().then(() => { closeNotebook(); openNotebook(el.dataset.id); }); } else openNotebook(el.dataset.id); },
   'cal-prev': () => { const c = S.cal; const d = new Date(c.y, c.m - 1, 1); S.cal = { ...c, y: d.getFullYear(), m: d.getMonth() }; render(false); },
@@ -1545,6 +1553,7 @@ const ACTIONS = {
 };
 document.addEventListener('click', (e) => {
   if (QC.open && !e.target.closest('#qc')) qcSet(false);
+  if (QC.menu && !e.target.closest('#qc')) fabSet(false);
   if (e.target === $('#overlay')) { closeModal(); return; }
   if (e.target === $('#palette')) { closePalette(); return; }
   const el = e.target.closest('[data-act]');
@@ -1554,7 +1563,7 @@ document.addEventListener('click', (e) => {
 });
 
 /* ---------- Captura rápida ---------- */
-const QC = { open: false, due: '', built: false };
+const QC = { open: false, menu: false, due: '', built: false };
 function qcDue(v) {
   if (!v) return null;
   const d = new Date();
@@ -1573,15 +1582,51 @@ function qcBuild() {
         <div class="qc-row"><input name="owner" list="owners" placeholder="Responsável (opcional)" aria-label="Responsável"><button class="btn primary">Salvar</button></div>
       </form>
     </div>
-    <button class="qc-fab" id="qc-fab" data-act="qc-toggle" aria-label="Captura rápida" aria-expanded="false" title="Captura rápida (Ctrl J)">${ico('plus')}</button>`;
+    <div class="qc-menu" id="qc-menu" role="menu" aria-label="Ações rápidas" hidden>
+      <button type="button" class="fab-item" role="menuitem" data-act="fab-capture">${ico('bolt')}<span class="fab-l">Captura rápida</span></button>
+      <button type="button" class="fab-item" role="menuitem" data-act="fab-new-meeting">${ico('note')}<span class="fab-l">Nova reunião</span></button>
+      <button type="button" class="fab-item" role="menuitem" data-act="fab-new-task">${ico('check')}<span class="fab-l">Nova tarefa</span></button>
+      <button type="button" class="fab-item" id="theme-btn" role="menuitem" data-act="fab-theme">${ico('palette')}<span class="fab-l">Cor do tema</span><span class="fab-val" id="theme-val"></span><i class="theme-dot" aria-hidden="true"></i></button>
+      <button type="button" class="fab-item" id="motion-btn" role="menuitemcheckbox" aria-checked="true" data-act="fab-motion">${ico('waves')}<span class="fab-l">Animação do fundo</span><span class="fab-val" id="motion-val"></span></button>
+    </div>
+    <button class="qc-fab" id="qc-fab" data-act="fab-toggle" aria-haspopup="menu" aria-expanded="false" aria-controls="qc-menu" aria-label="Abrir ações rápidas" title="Ações rápidas">${ico('plus')}</button>`;
+  $('#qc-menu').addEventListener('keydown', (e) => {
+    const items = $$('.fab-item', e.currentTarget), i = items.indexOf(document.activeElement);
+    const to = { ArrowDown: (i + 1) % items.length, ArrowUp: (i - 1 + items.length) % items.length, Home: 0, End: items.length - 1 }[e.key];
+    if (to !== undefined) { e.preventDefault(); items[to].focus(); }
+  });
+  syncFab();
+}
+// estado atual (cor e animação) mostrado dentro do menu, também para leitores de tela
+function syncFab() {
+  const menu = document.getElementById('qc-menu');
+  if (!menu) return;
+  const th = themeById(themeId) || THEMES[0];
+  const tb = document.getElementById('theme-btn'), mb = document.getElementById('motion-btn');
+  document.getElementById('theme-val').textContent = th.label;
+  tb.setAttribute('aria-label', `Cor do tema: ${th.label}. Toque para trocar`);
+  document.getElementById('motion-val').textContent = motionOn ? 'Ligada' : 'Parada';
+  mb.setAttribute('aria-checked', String(motionOn));
+  mb.setAttribute('aria-label', `Animação do fundo: ${motionOn ? 'ligada. Toque para parar' : 'parada. Toque para retomar'}`);
+}
+function fabSet(open, { focus = false } = {}) {
+  const menu = $('#qc-menu'), fab = $('#qc-fab');
+  if (!menu) return;
+  if (open && QC.open) qcSet(false);
+  QC.menu = open;
+  menu.hidden = !open;
+  fab.classList.toggle('on', open || QC.open);
+  fab.setAttribute('aria-expanded', String(open));
+  if (open) setTimeout(() => $('.fab-item', menu)?.focus(), 30);
+  else if (focus) fab.focus();
 }
 function qcSet(open) {
   QC.open = open;
   const pop = $('#qc-pop'), fab = $('#qc-fab');
   if (!pop) return;
   pop.hidden = !open;
-  fab.classList.toggle('on', open);
-  fab.setAttribute('aria-expanded', String(open));
+  if (open && QC.menu) fabSet(false);
+  fab.classList.toggle('on', open || QC.menu);
   if (open) { setTimeout(() => $('#qc-title').focus(), 30); }
   else { const f = $('form', pop); f.reset(); QC.due = ''; $$('.qc-chips .chip', pop).forEach((c, i) => c.classList.toggle('on', i === 0)); }
 }
@@ -1710,7 +1755,8 @@ document.addEventListener('keydown', (e) => {
     return;
   }
   if (e.key === 'Escape' && !$('#overlay').hidden) { closeModal(); return; }
-  if (e.key === 'Escape' && QC.open) qcSet(false);
+  if (e.key === 'Escape' && QC.menu) fabSet(false, { focus: true });
+  else if (e.key === 'Escape' && QC.open) qcSet(false);
 });
 
 /* ---------- arrastar e soltar no quadro ---------- */
@@ -1750,7 +1796,7 @@ const bootEl = $('#boot');
 const hideBoot = () => { bootEl.classList.add('gone'); setTimeout(() => (bootEl.hidden = true), 350); };
 function showLogin() {
   $('#app').hidden = true; $('#notebook').hidden = true;
-  $('#qc').hidden = true; qcSet(false);
+  $('#qc').hidden = true; qcSet(false); fabSet(false);
   $('#login').hidden = false;
   hideBoot();
   setTimeout(() => $('#login-email').focus(), 50);
