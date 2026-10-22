@@ -27,15 +27,17 @@ blocos do Hoje e quadro de tarefas com colunas coloridas por status. Áreas de e
 ficam mais firmes para a leitura. Quem pede menos transparência no sistema, ou navegadores sem suporte a desfoque,
 recebem fundos sólidos. A impressão da Gestão (PDF) continua branca e limpa em qualquer cor.
 
-**Cores:** o botão de paleta, no canto superior esquerdo, troca para a próxima cor a cada clique
+**Botão "+" (canto inferior direito):** ao tocar, abre um menu com Captura rápida, Nova reunião, Nova tarefa, Cor do tema e Animação do fundo. Escolher uma opção, tocar fora ou apertar Esc fecha o menu. O topo fica só com a busca.
+
+**Cores:** a opção "Cor do tema" do menu troca para a próxima cor a cada toque
 (Esmeralda, Rubi, Ouro, Prata). A escolha fica guardada no aparelho e na sua conta, então vale em todos os dispositivos.
 Também dá para trocar pela busca (`Ctrl + K`, digite "cor do tema").
 
 Para criar uma cor nova: copie um bloco `:root[data-theme="..."]` no início do `styles.css`, troque os valores
 e acrescente a cor na lista `THEMES` do `app.js`. Os tokens `--glass-*` e `--s-*` (status) valem para todas.
 
-**Movimento do fundo:** luzes suaves percorrem as curvas do fundo, bem devagar (ciclos de 36 a 60 segundos). O botão de
-ondas, ao lado do botão de cores, liga e desliga o movimento (a escolha também fica no aparelho e na conta). Quem usa
+**Movimento do fundo:** luzes suaves percorrem as curvas do fundo, bem devagar (ciclos de 36 a 60 segundos). A opção
+"Animação do fundo" do menu "+" para e retoma o movimento (a escolha também fica no aparelho e na conta). Quem usa
 "reduzir movimento" no sistema já começa com ele desligado, mas pode ligar. O movimento pausa sozinho quando a aba fica
 em segundo plano e, no celular, usa menos luzes. Também dá para alternar pela busca (`Ctrl + K`, digite "movimento").
 As curvas animadas ficam no `<svg id="flow">` do `index.html` (cada `<g class="pl">` é uma luz, com `data-d` = duração em
