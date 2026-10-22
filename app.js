@@ -282,8 +282,13 @@ function renderNav() {
   </div>`;
 }
 
+// Nome de quem está logado: vem do cadastro (user_metadata.name) ou da lista NAMES no config.js; sem nome, o texto fica neutro.
+const userName = () => {
+  const u = S.user, em = String(u?.email || '').toLowerCase();
+  return String(u?.user_metadata?.name || (CFG.NAMES && CFG.NAMES[em]) || '').trim();
+};
 function ownerList() {
-  const set = new Set([CFG.OWNER_NAME]);
+  const set = new Set([userName()]);
   S.tasks.forEach((t) => t.owner && set.add(t.owner));
   S.meetings.forEach((m) => (Array.isArray(m.actions) ? m.actions : []).forEach((a) => a.owner && set.add(a.owner)));
   return [...set].filter(Boolean);
@@ -354,7 +359,7 @@ function vHoje() {
   const soon = open.filter((x) => x.due_date && x.due_date > t && x.due_date <= addDays(t, 7)).sort(cmpDue);
   const doneWeek = S.tasks.filter((x) => isDone(x.status) && x.completed_at && localDateOf(x.completed_at) >= addDays(t, -6)).length;
   const entry = S.diary.find((d) => d.entry_date === t);
-  const first = CFG.OWNER_NAME.split(' ')[0];
+  const first = userName().split(' ')[0];
   const now = new Date();
   const h = now.getHours();
   const greet = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
@@ -404,7 +409,7 @@ function vHoje() {
     <div class="page-head">
       <div>
         <h1 class="cap">${esc(fmtLong(t))}</h1>
-        <p class="page-sub">${greet}, ${esc(first)}. ${esc(cap(bits.join(', ')))}.</p>
+        <p class="page-sub">${greet}${first ? `, ${esc(first)}` : ''}. ${esc(cap(bits.join(', ')))}.</p>
       </div>
       <div class="head-actions mobile-only"><button class="btn primary" data-act="new-meeting">${ico('plus')}Nova reunião</button></div>
     </div>
@@ -1129,7 +1134,7 @@ function gesRelatorio(key) {
     <article class="doc">
       <header class="doc-head">
         <div><h1>Relatório de gestão</h1><p class="sub">${esc(cap(monthLabel(key)))}</p></div>
-        <p class="doc-by">Preparado por ${esc(CFG.OWNER_NAME)}<br>Emitido em ${fmtFull(t)}</p>
+        <p class="doc-by">Preparado por ${esc(userName() || S.user?.email || '')}<br>Emitido em ${fmtFull(t)}</p>
       </header>
       <div class="kpis">
         <div class="kpi"><b>${ms.length}</b><span>${ms.length === 1 ? 'reunião realizada' : 'reuniões realizadas'}</span></div>
