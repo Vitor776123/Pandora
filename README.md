@@ -56,8 +56,8 @@ desfocado dos cartões).
 
 - A chave em `config.js` é a chave pública (`anon`) do Supabase. Ela pode ficar no GitHub.
   **Nunca** coloque ali a chave `service_role` nem a senha.
-- Os dados são protegidos por login e por regras no banco (RLS): somente o e-mail
-  `vdomingues@alkes.com.br` consegue ler e gravar. Outra pessoa que se cadastre não vê nada.
+- Os dados são protegidos por login e por regras no banco (RLS): só quem está na tabela `equipe` entra, e cada
+  pessoa só enxerga o que as regras permitem (veja **Equipe e visões** abaixo). Outra pessoa que se cadastre não vê nada.
 - Para reforçar, no painel do Supabase (projeto `command-center`):
   - **Authentication > Sign In / Providers > Email**: desative *Allow new users to sign up*.
   - **Authentication > Password security**: ative *Prevent use of leaked passwords* (se o plano permitir).
@@ -68,14 +68,36 @@ desfocado dos cartões).
 
 Em **Conta > Baixar backup (JSON)** você baixa tudo (reuniões, tarefas, diário e relatórios).
 
-## Trocar o nome exibido na Gestão
+## Nome exibido
 
-Edite `OWNER_NAME` em `config.js`.
+A saudação e o "Preparado por" da Gestão usam o nome da pessoa logada: o `nome` na tabela `equipe` ou, se faltar,
+o nome em `config.js > NAMES` / no perfil do usuário.
+
+## Equipe e visões
+
+O Pandora é usado por mais de uma pessoa, cada uma com a sua visão. Quem é da equipe está na tabela `equipe`
+(`papel`: `supervisor` ou `analista`).
+
+| O quê | Quem vê |
+|---|---|
+| **Tarefas · Minhas** | as suas e as marcadas como "Equipe" |
+| **Tarefas · Equipe** | só o supervisor: tudo, com filtro por pessoa |
+| **Tarefas · Aguardando terceiros** | tarefas com responsável de fora da equipe (ex.: Juliana Lima) |
+| **Reuniões / Calendário / Hoje** | as suas; as reuniões com "Visível para: Equipe" aparecem para todos |
+| **Diário e Relatório mensal** | individuais: cada um só vê o próprio |
+| **Projetos, links e modelos de reunião** | compartilhados pela equipe |
+
+No campo **Responsável**: vazio = você; `Equipe` = compartilhada; nome de alguém da equipe = essa pessoa; outro nome =
+terceiro. O supervisor também tem o bloco **Equipe no mês** no relatório.
+
+Essas regras valem no banco (RLS), não só na tela. Para incluir outra pessoa: crie o login em *Authentication > Users*
+e adicione uma linha em `equipe` (`user_id`, `email`, `nome`, `papel`). A migração está em `pandora_equipe_segmentacao.sql`
+(rode no SQL Editor do Supabase; mantenha fora do repositório público).
 
 ## Estrutura do banco
 
-Tabelas: `projects`, `meeting_templates`, `meetings`, `tasks` (com `owner`), `diary_entries`, `reports`, `project_links`,
-todas com RLS ligada. As migrações já foram aplicadas no projeto Supabase.
+Tabelas: `equipe`, `projects`, `meeting_templates`, `meetings` (com `escopo`), `tasks` (com `owner`, `owner_id`, `escopo`),
+`diary_entries`, `reports`, `project_links`, todas com RLS ligada.
 
 ## Fase 3 (opcional): resumo com IA
 
