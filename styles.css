@@ -396,7 +396,7 @@ textarea.ruled:focus { box-shadow: none; }
   background: transparent; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 4px 0 12px;
 }
 .paper-title:focus { box-shadow: none; border-bottom-color: var(--gold); }
-.meta { display: grid; grid-template-columns: 1.4fr 1.6fr 1fr 0.8fr; gap: 14px; margin: 20px 0 8px; }
+.meta { display: grid; grid-template-columns: 1.3fr 1.5fr 1fr 0.8fr 0.9fr; gap: 14px; margin: 20px 0 8px; }
 .nb-sec { margin-top: 34px; }
 .nb-sec h3 { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
 .act-row { display: grid; grid-template-columns: 10px minmax(0, 1fr) 170px 150px 32px; gap: 12px; align-items: center; margin-bottom: 8px; }
@@ -491,6 +491,9 @@ textarea.ruled:focus { box-shadow: none; }
 .doc section { margin-bottom: 34px; }
 .t-row { display: grid; grid-template-columns: minmax(0, 2fr) 130px minmax(120px, 1fr) 90px; gap: 14px; align-items: center; padding: 11px 0; border-bottom: 1px solid var(--line-soft); font-size: 14px; }
 .t-row .bar { margin: 0; }
+.t-row.pp { grid-template-columns: minmax(0, 1fr) 88px 88px 88px; text-align: right; }
+.t-row.pp > :first-child { text-align: left; }
+.t-row.pp .neg { color: var(--danger); }
 .t-row.head { color: var(--faint); font-size: 12px; padding: 4px 0 6px; }
 .item { padding: 11px 0; border-bottom: 1px solid var(--line-soft); }
 .item-top { display: grid; grid-template-columns: 46px minmax(0, 1fr) auto; grid-template-areas: "dt t st"; gap: 12px; align-items: baseline; }
@@ -500,6 +503,12 @@ textarea.ruled:focus { box-shadow: none; }
 .item-top .pj { grid-area: pj; min-width: 0; color: var(--muted); font-size: 13px; text-align: right; }
 .item-top .st { grid-area: st; color: var(--muted); font-size: 13px; white-space: nowrap; }
 .item p { margin: 4px 0 0 58px; color: var(--muted); font-size: 14px; white-space: pre-wrap; }
+/* abas das tarefas: Minhas / Equipe / Aguardando terceiros */
+.seg { display: inline-flex; max-width: 100%; overflow-x: auto; gap: 4px; padding: 4px; margin: -8px 0 18px; border-radius: 16px; border: 1px solid rgba(var(--ac-rgb), 0.2); background: rgba(var(--c-lo), 0.5); }
+.seg-b { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; padding: 8px 14px; min-height: 40px; border-radius: 12px; color: var(--muted); font-size: 14px; transition: background 0.15s, color 0.15s; }
+.seg-b:hover { color: var(--text); }
+.seg-b.on { color: var(--text); background: rgba(var(--ac-rgb), 0.16); box-shadow: inset 0 0 0 1px rgba(var(--ac-rgb), 0.4); }
+.seg-n { font-size: 12px; min-width: 20px; padding: 1px 6px; text-align: center; border-radius: 999px; background: rgba(var(--ac-rgb), 0.14); color: var(--gold); }
 /* selects com opções muito compridas não alargam a página */
 .head-actions { min-width: 0; max-width: 100%; }
 .head-actions select, .head-actions input { min-width: 0; max-width: 100%; text-overflow: ellipsis; }
@@ -1044,6 +1053,7 @@ html[data-motion="off"] .flow { display: none; }
   .tl-act .tl-ao, .tl-act .pill { grid-column: 2; }
   .kpis { grid-template-columns: 1fr 1fr; }
   .t-row { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .t-row.pp { grid-template-columns: minmax(0, 1fr) 62px 62px 62px; gap: 8px; font-size: 13px; }
   .t-row > * { min-width: 0; overflow-wrap: anywhere; }
   .item-top, .item-top.has-pj { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "dt st" "t t" "pj pj"; gap: 4px 10px; }
   .item-top .st { white-space: normal; text-align: right; }
