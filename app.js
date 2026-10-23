@@ -182,10 +182,10 @@ const KEY_POINTS_DEFAULT = '1. \n2. \n3. \n4. ';
    ========================================================= */
 const S = {
   user: null,
-  projects: [], templates: [], meetings: [], tasks: [], diary: [], reports: [], links: [],
+  projects: [], templates: [], meetings: [], tasks: [], tasksAll: [], team: [], me: null, diary: [], reports: [], links: [],
   cal: { y: new Date().getFullYear(), m: new Date().getMonth(), sel: todayStr() },
   diarySel: null, repMonth: null, gesMonth: null, boardProject: '', meetFilter: '',
-  gesTab: 'relatorio', tlProject: '', tlOpen: null,
+  gesTab: 'relatorio', tlProject: '', tlOpen: null, taskView: 'minhas', taskPerson: '',
 };
 
 const loaders = {
@@ -196,14 +196,45 @@ const loaders = {
   diary: () => sb.from('diary_entries').select('*').order('entry_date', { ascending: false }),
   reports: () => sb.from('reports').select('*').order('month', { ascending: false }),
   links: () => sb.from('project_links').select('*').order('created_at'),
+  team: () => sb.from('equipe').select('*').order('criado_em'),
 };
 async function reload(...keys) {
   const ks = keys.length ? keys : Object.keys(loaders);
   const res = await Promise.all(ks.map((k) => loaders[k]()));
   res.forEach((r, i) => {
-    if (r.error) { if (ks[i] === 'links') { console.warn(r.error); S.links = []; return; } throw r.error; }
+    if (r.error) {
+      if (ks[i] === 'links') { console.warn(r.error); S.links = []; return; }
+      if (ks[i] === 'team') { console.warn(r.error); S.team = []; return; }
+      throw r.error;
+    }
     S[ks[i]] = r.data || [];
   });
+  if (ks.includes('team')) S.me = S.team.find((m) => m.user_id === S.user?.id) || (S.user ? { user_id: S.user.id, nome: '', email: S.user.email, papel: 'supervisor' } : null);
+  // S.tasksAll = tudo o que a conta pode ver; S.tasks = só o que é "meu" (minhas + da equipe). As telas do dia a dia usam S.tasks.
+  if (ks.includes('tasks')) { S.tasksAll = S.tasks; S.tasks = S.tasksAll.filter(taskMine); }
+}
+const isSup = () => S.me?.papel === 'supervisor';
+const memberOf = (id) => S.team.find((m) => m.user_id === id);
+// "minha": sou o responsável, ou a tarefa é da equipe toda (bancos antigos, sem as colunas novas, tratam tudo como meu)
+const taskMine = (t) => !('owner_id' in t) || t.owner_id === S.user?.id || t.escopo === 'equipe';
+// aguardando outra pessoa (fora do sistema, como a Juliana): tem responsável em texto e não é de ninguém da equipe
+const taskWaiting = (t) => 'owner_id' in t && !t.owner_id && t.escopo !== 'equipe';
+const shortName = (n) => String(n || '').split(' ').filter(Boolean).slice(0, 2).join(' ');
+function ownerLabel(t) {
+  if (t.escopo === 'equipe') return 'Equipe';
+  if (t.owner_id) return shortName(memberOf(t.owner_id)?.nome) || 'Equipe';
+  return t.owner || '';
+}
+const ownerIsMe = (t) => t.owner_id === S.user?.id;
+// Texto do campo "Responsável" → colunas: vazio = eu; "Equipe" = todos; nome de alguém da equipe = essa pessoa; outro nome = aguardando terceiro.
+function resolveOwner(txt) {
+  const t = String(txt || '').trim();
+  if (!t) return { owner_id: S.user.id, owner: null, escopo: 'pessoal' };
+  const q = norm(t);
+  if (q === 'equipe' || q === 'time') return { owner_id: null, owner: 'Equipe', escopo: 'equipe' };
+  const m = S.team.find((x) => [x.nome, String(x.nome).split(' ')[0], String(x.email).split('@')[0]].some((n) => norm(n) === q));
+  if (m) return { owner_id: m.user_id, owner: null, escopo: 'pessoal' };
+  return { owner_id: null, owner: t, escopo: 'pessoal' };
 }
 const friendly = (e) => (/jwt|expired|not authenticated/i.test(e?.message || '') ? 'Sua sessão expirou. Entre novamente.' : (e?.message || 'Erro inesperado.'));
 async function call(p) {
@@ -285,11 +316,12 @@ function renderNav() {
 // Nome de quem está logado: vem do cadastro (user_metadata.name) ou da lista NAMES no config.js; sem nome, o texto fica neutro.
 const userName = () => {
   const u = S.user, em = String(u?.email || '').toLowerCase();
-  return String(u?.user_metadata?.name || (CFG.NAMES && CFG.NAMES[em]) || '').trim();
+  return String(S.me?.nome || u?.user_metadata?.name || (CFG.NAMES && CFG.NAMES[em]) || '').trim();
 };
 function ownerList() {
-  const set = new Set([userName()]);
-  S.tasks.forEach((t) => t.owner && set.add(t.owner));
+  const set = new Set(['Equipe', ...S.team.map((m) => m.nome)]);
+  if (!S.team.length) set.add(userName());
+  S.tasksAll.forEach((t) => t.owner && t.owner !== 'Equipe' && set.add(t.owner));
   S.meetings.forEach((m) => (Array.isArray(m.actions) ? m.actions : []).forEach((a) => a.owner && set.add(a.owner)));
   return [...set].filter(Boolean);
 }
@@ -328,7 +360,7 @@ function taskRow(x, inDay = false) {
   const late = !isDone(x.status) && x.due_date && x.due_date < todayStr();
   return `<div class="row ${isDone(x.status) ? 'is-done' : ''}" data-act="open-task" data-id="${x.id}" tabindex="0" role="button">
     <button class="check ${isDone(x.status) ? 'on' : ''}" data-act="complete-task" data-id="${x.id}" aria-label="${isDone(x.status) ? 'Reabrir tarefa' : 'Marcar como feita'}"></button>
-    <div class="row-main"><div class="row-title">${esc(x.title)}</div>${proj || x.owner ? `<div class="row-sub">${[proj && esc(proj.name), x.owner && `Resp.: ${esc(x.owner)}`].filter(Boolean).join(' · ')}</div>` : ''}</div>
+    <div class="row-main"><div class="row-title">${esc(x.title)}</div>${proj || ownerLabel(x) ? `<div class="row-sub">${[proj && esc(proj.name), ownerLabel(x) && !ownerIsMe(x) && `Resp.: ${esc(ownerLabel(x))}`].filter(Boolean).join(' · ')}</div>` : ''}</div>
     ${pill(x.status)}
     <span class="due ${late ? 'late' : ''}">${inDay && isDone(x.status) && x.completed_at ? `feita ${esc(localTimeOf(x.completed_at))}` : x.due_date ? `${inDay ? 'prazo ' : ''}${fmtShort(x.due_date)}` : 'sem prazo'}</span>
   </div>`;
@@ -337,11 +369,11 @@ function taskRow(x, inDay = false) {
 const taskDay = (t) => (isDone(t.status) ? (t.completed_at ? localDateOf(t.completed_at) : t.due_date) : t.due_date) || '';
 function meetRow(m, showDate = false) {
   const proj = byId(S.projects, m.project_id);
-  const n = S.tasks.filter((t) => t.meeting_id === m.id).length;
+  const n = S.tasksAll.filter((t) => t.meeting_id === m.id).length;
   return `<div class="row" data-act="open-meeting" data-id="${m.id}" tabindex="0" role="button">
     <span class="${showDate ? 'dt' : 'time'}">${showDate ? fmtShort(m.meeting_date) : (hm(m.start_time) || '--:--')}</span>
     <div class="row-main"><div class="row-title">${esc(m.title || 'Reunião sem título')}</div>
-      <div class="row-sub">${esc(m.kind)}${proj ? ` · ${esc(proj.name)}` : ''}${n ? ` · ${pl(n, 'ação', 'ações')}` : ''}</div></div>
+      <div class="row-sub">${esc(m.kind)}${proj ? ` · ${esc(proj.name)}` : ''}${n ? ` · ${pl(n, 'ação', 'ações')}` : ''}${m.escopo === 'equipe' ? ' · Equipe' : ''}</div></div>
     ${m.status === 'Finalizada' ? '<span class="tag done">Registrada</span>' : '<span class="tag draft">Rascunho</span>'}
   </div>`;
 }
@@ -578,7 +610,7 @@ function openNotebook(id, opts = {}) {
     m = {
       id: null, title: '', meeting_date: opts.date || todayStr(), start_time: nowHM(), kind: tpl?.name || 'Geral',
       project_id: null, agenda: tpl?.agenda || '', key_points: tpl?.key_points || KEY_POINTS_DEFAULT,
-      observations: '', decisions: '', status: 'Em andamento',
+      observations: '', decisions: '', status: 'Em andamento', escopo: 'pessoal',
       actions: (tpl?.default_tasks || []).map((t) => ({ title: t, due: '', owner: '' })),
     };
   }
@@ -637,6 +669,7 @@ function renderNotebook(flip = 0) {
         <label>Projeto<select data-nb="project_id"><option value="">Sem projeto</option>${S.projects.map((p) => `<option value="${p.id}" ${p.id === m.project_id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>
         <label>Data<input type="date" data-nb="meeting_date" value="${m.meeting_date}"></label>
         <label>Hora<input type="time" data-nb="start_time" value="${esc(m.start_time || '')}"></label>
+        <label>Visível para<select data-nb="escopo" ${m.id && m.user_id && m.user_id !== S.user.id ? 'disabled' : ''}><option value="pessoal" ${m.escopo !== 'equipe' ? 'selected' : ''}>Só eu</option><option value="equipe" ${m.escopo === 'equipe' ? 'selected' : ''}>Equipe</option></select></label>
       </div>
       ${sec('Pauta', 'agenda', 3)}
       ${sec('Pontos principais', 'key_points', 5)}
@@ -660,7 +693,7 @@ function renderNbActions() {
   if (!box || !NB) return;
   const m = NB.m;
   if (m.status === 'Finalizada') {
-    const ts = S.tasks.filter((t) => t.meeting_id === m.id).sort(cmpDue);
+    const ts = S.tasksAll.filter((t) => t.meeting_id === m.id).sort(cmpDue);
     box.innerHTML = `${ts.length ? ts.map(taskRow).join('') : '<p class="muted">Esta reunião não gerou ações.</p>'}
       <div class="act-add"><input id="na-title" placeholder="Nova ação" aria-label="Nova ação"><input id="na-owner" list="owners" placeholder="Responsável" aria-label="Responsável" autocomplete="off"><input type="date" id="na-due" aria-label="Prazo"><button class="btn" data-act="nb-add-task">Adicionar</button></div>`;
     return;
@@ -687,7 +720,7 @@ async function persistMeeting(nb) {
   if (!m.id && !hasContent(m)) return;
   const payload = {
     title: m.title || '', meeting_date: m.meeting_date || todayStr(), start_time: m.start_time || null,
-    kind: m.kind, project_id: m.project_id || null, agenda: m.agenda, key_points: m.key_points,
+    kind: m.kind, escopo: m.escopo === 'equipe' ? 'equipe' : 'pessoal', project_id: m.project_id || null, agenda: m.agenda, key_points: m.key_points,
     observations: m.observations, decisions: m.decisions,
     actions: m.actions.filter((a) => a.title.trim() || a.due),
   };
@@ -768,7 +801,7 @@ async function nbFinish() {
     if (!m.id) throw new Error('Não foi possível salvar a reunião.');
     if (acts.length) {
       await call(sb.from('tasks').insert(acts.map((a) => ({
-        title: a.title.trim(), due_date: a.due || null, owner: (a.owner || '').trim() || null, status: 'Pendente', meeting_id: m.id, project_id: m.project_id || null,
+        title: a.title.trim(), due_date: a.due || null, ...resolveOwner(a.owner), status: 'Pendente', meeting_id: m.id, project_id: m.project_id || null,
       }))));
       m.actions = [];
     }
@@ -798,7 +831,7 @@ async function nbDelete() {
 function ataText(m) {
   const fin = m.status === 'Finalizada';
   const acts = fin
-    ? S.tasks.filter((t) => t.meeting_id === m.id).sort(cmpDue).map((t) => ({ title: t.title, due: t.due_date || '', owner: t.owner || '' }))
+    ? S.tasksAll.filter((t) => t.meeting_id === m.id).sort(cmpDue).map((t) => ({ title: t.title, due: t.due_date || '', owner: ownerLabel(t) }))
     : (m.actions || []).filter((a) => (a.title || '').trim()).map((a) => ({ title: a.title.trim(), due: a.due || '', owner: (a.owner || '').trim() }));
   const proj = byId(S.projects, m.project_id);
   const L = [`ATA DE REUNIÃO: ${(m.title || '').trim() || 'Sem título'}`];
@@ -836,8 +869,18 @@ async function copyAta(m) {
 /* =========================================================
    Tarefas
    ========================================================= */
+function taskViewList() {
+  if (S.taskView === 'equipe' && isSup()) return S.tasksAll.filter((t) => !S.taskPerson || (S.taskPerson === 'terceiros' ? taskWaiting(t) : t.owner_id === S.taskPerson || (S.taskPerson === 'equipe' && t.escopo === 'equipe')));
+  if (S.taskView === 'terceiros') return S.tasksAll.filter(taskWaiting).filter((t) => isSup() || t.user_id === S.user.id);
+  return S.tasks;
+}
 function vTarefas() {
-  const tasks = S.tasks.filter((t) => !S.boardProject || t.project_id === S.boardProject);
+  if (S.taskView === 'equipe' && !isSup()) S.taskView = 'minhas';
+  const openN = (arr) => arr.filter((t) => !isDone(t.status)).length;
+  const waiting = S.tasksAll.filter(taskWaiting).filter((t) => isSup() || t.user_id === S.user.id);
+  const tabs = [['minhas', 'Minhas', openN(S.tasks)], ...(isSup() ? [['equipe', 'Equipe', openN(S.tasksAll)]] : []), ['terceiros', 'Aguardando terceiros', openN(waiting)]];
+  const showOwner = S.taskView !== 'minhas';
+  const tasks = taskViewList().filter((t) => !S.boardProject || t.project_id === S.boardProject);
   const lanes = STATUSES.map((st) => {
     const arr = tasks.filter((t) => t.status === st).sort((a, b) => (a.due_date || '9999').localeCompare(b.due_date || '9999'));
     return `<div class="lane" data-status="${st}" style="--c:${SCOLOR[st]}">
@@ -847,7 +890,7 @@ function vTarefas() {
         const late = !isDone(x.status) && x.due_date && x.due_date < todayStr();
         return `<article class="card" draggable="true" data-act="open-task" data-id="${x.id}" tabindex="0" role="button">
           <div class="card-title">${esc(x.title)}</div>
-          <div class="card-meta">${x.due_date ? `<span class="due ${late ? 'late' : ''}" style="min-width:0">${fmtShort(x.due_date)}</span>` : ''}${p ? `<span>${esc(p.name)}</span>` : ''}${x.owner ? `<span class="own">${esc(x.owner)}</span>` : ''}${x.meeting_id ? '<span>de reunião</span>' : ''}</div>
+          <div class="card-meta">${x.due_date ? `<span class="due ${late ? 'late' : ''}" style="min-width:0">${fmtShort(x.due_date)}</span>` : ''}${p ? `<span>${esc(p.name)}</span>` : ''}${ownerLabel(x) && (showOwner || !ownerIsMe(x)) ? `<span class="own">${esc(ownerLabel(x))}</span>` : ''}${x.meeting_id ? '<span>de reunião</span>' : ''}</div>
         </article>`;
       }).join('')}
     </div>`;
@@ -856,6 +899,7 @@ function vTarefas() {
     <div class="page-head">
       <div><h1>Tarefas</h1><p class="page-sub">Arraste os cartões entre as colunas para mudar o status.</p></div>
       <div class="head-actions">
+        ${S.taskView === 'equipe' ? `<select data-bind="board-person" aria-label="Filtrar por pessoa" style="width:auto"><option value="">Toda a equipe</option>${S.team.map((m) => `<option value="${m.user_id}" ${S.taskPerson === m.user_id ? 'selected' : ''}>${esc(shortName(m.nome))}</option>`).join('')}<option value="equipe" ${S.taskPerson === 'equipe' ? 'selected' : ''}>Tarefas da equipe</option><option value="terceiros" ${S.taskPerson === 'terceiros' ? 'selected' : ''}>Aguardando terceiros</option></select>` : ''}
         <select data-bind="board-project" aria-label="Filtrar por projeto" style="width:auto">
           <option value="">Todos os projetos</option>
           ${S.projects.map((p) => `<option value="${p.id}" ${S.boardProject === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}
@@ -863,12 +907,13 @@ function vTarefas() {
         <button class="btn primary" data-act="new-task">${ico('plus')}Nova tarefa</button>
       </div>
     </div>
+    <div class="seg" role="tablist" aria-label="Quais tarefas mostrar">${tabs.map(([k, l, n]) => `<button type="button" role="tab" class="seg-b ${S.taskView === k ? 'on' : ''}" aria-selected="${S.taskView === k}" data-act="task-view" data-v="${k}">${l}<span class="seg-n">${n}</span></button>`).join('')}</div>
     <div class="board">${lanes}</div>
   </section>`;
 }
 
 function openTask(id, preset = {}) {
-  const x = id ? byId(S.tasks, id) : { title: '', notes: '', owner: '', status: 'Pendente', due_date: preset.due || '', project_id: preset.project_id || '', meeting_id: preset.meeting_id || '' };
+  const x = id ? byId(S.tasksAll, id) : { title: '', notes: '', owner: '', status: 'Pendente', due_date: preset.due || '', project_id: preset.project_id || '', meeting_id: preset.meeting_id || '' };
   if (!x) return;
   openModal(`
     <h3 class="modal-title">${id ? 'Tarefa' : 'Nova tarefa'}</h3>
@@ -880,7 +925,7 @@ function openTask(id, preset = {}) {
       </div>
       <div class="two">
         <label>Projeto<select name="project_id"><option value="">Sem projeto</option>${S.projects.map((p) => `<option value="${p.id}" ${p.id === x.project_id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>
-        <label>Responsável<input name="owner" list="owners" autocomplete="off" placeholder="Nome" value="${esc(x.owner || '')}"></label>
+        <label>Responsável<input name="owner" list="owners" autocomplete="off" placeholder="Vazio = você · Equipe · nome" value="${esc(id ? ownerLabel(x) : '')}"></label>
       </div>
       <label>Notas<textarea name="notes" rows="3">${esc(x.notes || '')}</textarea></label>
       ${x.meeting_id ? `<button type="button" class="link" data-act="open-meeting" data-id="${x.meeting_id}">Abrir a reunião de origem</button>` : ''}
@@ -896,12 +941,12 @@ function openTask(id, preset = {}) {
 async function submitTask(form) {
   const f = new FormData(form);
   const id = form.dataset.id;
-  const old = id ? byId(S.tasks, id) : null;
+  const old = id ? byId(S.tasksAll, id) : null;
   const status = f.get('status');
   const patch = {
     title: String(f.get('title')).trim(), status,
     due_date: f.get('due_date') || null, project_id: f.get('project_id') || null,
-    notes: String(f.get('notes')).trim() || null, owner: String(f.get('owner') || '').trim() || null,
+    notes: String(f.get('notes')).trim() || null, ...resolveOwner(f.get('owner')),
     completed_at: isDone(status) ? (old?.completed_at || new Date().toISOString()) : null,
   };
   if (!patch.title) return;
@@ -911,7 +956,7 @@ async function submitTask(form) {
   closeModal(); refreshUI(); toast('Tarefa salva.');
 }
 async function setTaskStatus(id, status) {
-  const t = byId(S.tasks, id);
+  const t = byId(S.tasksAll, id);
   const patch = { status, completed_at: isDone(status) ? (t.completed_at || new Date().toISOString()) : null };
   await call(sb.from('tasks').update(patch).eq('id', id));
   Object.assign(t, patch);
@@ -922,7 +967,7 @@ async function setTaskStatus(id, status) {
    Projetos
    ========================================================= */
 const projStats = (id) => {
-  const ts = S.tasks.filter((t) => t.project_id === id);
+  const ts = S.tasksAll.filter((t) => t.project_id === id);
   const done = ts.filter((t) => isDone(t.status)).length;
   return { total: ts.length, done, pct: ts.length ? Math.round((done / ts.length) * 100) : 0 };
 };
@@ -1022,14 +1067,14 @@ function monthKeys() {
   S.reports.forEach((r) => s.add(monthOf(r.month)));
   S.meetings.forEach((m) => s.add(monthOf(m.meeting_date)));
   S.diary.forEach((d) => s.add(monthOf(d.entry_date)));
-  S.tasks.forEach((t) => { if (t.completed_at) s.add(monthOf(localDateOf(t.completed_at))); if (t.due_date) s.add(monthOf(t.due_date)); });
+  S.tasksAll.forEach((t) => { if (t.completed_at) s.add(monthOf(localDateOf(t.completed_at))); if (t.due_date) s.add(monthOf(t.due_date)); });
   return [...s].sort().reverse();
 }
 const reportOf = (key) => S.reports.find((r) => monthOf(r.month) === key);
 function monthData(key) {
   const ms = S.meetings.filter((m) => m.status === 'Finalizada' && monthOf(m.meeting_date) === key).sort((a, b) => a.meeting_date.localeCompare(b.meeting_date));
-  const doneT = S.tasks.filter((t) => isDone(t.status) && t.completed_at && monthOf(localDateOf(t.completed_at)) === key).sort((a, b) => a.completed_at.localeCompare(b.completed_at));
-  const open = S.tasks.filter((t) => !isDone(t.status)).sort(cmpDue);
+  const doneT = S.tasksAll.filter((t) => isDone(t.status) && t.completed_at && monthOf(localDateOf(t.completed_at)) === key).sort((a, b) => a.completed_at.localeCompare(b.completed_at));
+  const open = S.tasksAll.filter((t) => !isDone(t.status)).sort(cmpDue);
   const late = open.filter((t) => t.due_date && t.due_date < todayStr());
   const diary = S.diary.filter((d) => monthOf(d.entry_date) === key && d.content.trim()).sort((a, b) => a.entry_date.localeCompare(b.entry_date));
   return { ms, doneT, open, late, diary };
@@ -1142,6 +1187,7 @@ function gesRelatorio(key) {
         <div class="kpi"><b>${open.length}</b><span>${open.length === 1 ? 'pendência em aberto' : 'pendências em aberto'}</span></div>
         <div class="kpi ${late.length ? 'warn' : ''}"><b>${late.length}</b><span>com prazo vencido</span></div>
       </div>
+      ${isSup() && S.team.length > 1 ? gesPessoas(key) : ''}
       <section>
         <h2>Projetos</h2>
         ${S.projects.length ? `<div class="t-row head"><span>Projeto</span><span>Status</span><span>Avanço</span><span>Tarefas</span></div>${S.projects.map((p) => {
@@ -1166,6 +1212,22 @@ function gesRelatorio(key) {
     </article>`;
 }
 
+// Quadro "por pessoa" do mês (só para o supervisor)
+function gesPessoas(key) {
+  const { doneT, open, late } = monthData(key);
+  const rows = new Map();
+  const row = (t) => { const n = ownerLabel(t) || 'Sem responsável'; if (!rows.has(n)) rows.set(n, { n, done: 0, open: 0, late: 0 }); return rows.get(n); };
+  doneT.forEach((t) => { row(t).done++; });
+  open.forEach((t) => { row(t).open++; });
+  late.forEach((t) => { row(t).late++; });
+  const list = [...rows.values()].sort((x, y) => y.done - x.done || x.n.localeCompare(y.n));
+  return `<section>
+        <h2>Equipe no mês</h2>
+        <div class="t-row pp head"><span>Pessoa</span><span>Concluídas</span><span>Em aberto</span><span>Vencidas</span></div>
+        ${list.length ? list.map((r) => `<div class="t-row pp"><span>${esc(r.n)}</span><span>${r.done}</span><span>${r.open}</span><span class="${r.late ? 'neg' : ''}">${r.late}</span></div>`).join('') : '<p class="muted">Sem tarefas no período.</p>'}
+      </section>`;
+}
+
 function gesLinksDoc() {
   const withLinks = S.projects.filter((p) => S.links.some((l) => l.project_id === p.id));
   if (!withLinks.length) return '';
@@ -1176,7 +1238,7 @@ function gesLinksDoc() {
 function tlDetail(m) {
   const fin = m.status === 'Finalizada';
   const acts = fin
-    ? S.tasks.filter((t) => t.meeting_id === m.id).sort(cmpDue).map((t) => ({ title: t.title, due: t.due_date || '', owner: t.owner || '', status: t.status }))
+    ? S.tasksAll.filter((t) => t.meeting_id === m.id).sort(cmpDue).map((t) => ({ title: t.title, due: t.due_date || '', owner: ownerLabel(t), status: t.status }))
     : (Array.isArray(m.actions) ? m.actions : []).filter((a) => (a.title || '').trim()).map((a) => ({ title: a.title, due: a.due || '', owner: a.owner || '' }));
   const part = (title, txt, numbered) => {
     let t = String(txt || '');
@@ -1191,7 +1253,7 @@ function tlDetail(m) {
 function tlItem(m) {
   const proj = byId(S.projects, m.project_id);
   const open = S.tlOpen === m.id;
-  const n = m.status === 'Finalizada' ? S.tasks.filter((t) => t.meeting_id === m.id).length : (Array.isArray(m.actions) ? m.actions.filter((a) => (a.title || '').trim()).length : 0);
+  const n = m.status === 'Finalizada' ? S.tasksAll.filter((t) => t.meeting_id === m.id).length : (Array.isArray(m.actions) ? m.actions.filter((a) => (a.title || '').trim()).length : 0);
   return `<div class="tl-item ${open ? 'open' : ''}" data-id="${m.id}">
     <button class="tl-head" data-act="tl-toggle" data-id="${m.id}" aria-expanded="${open}">
       <span class="tl-dot"></span>
@@ -1455,7 +1517,7 @@ function openAccount() {
     </div>`);
 }
 function exportBackup() {
-  const data = { exportado_em: new Date().toISOString(), projetos: S.projects, modelos: S.templates, reunioes: S.meetings, tarefas: S.tasks, diario: S.diary, relatorios: S.reports };
+  const data = { exportado_em: new Date().toISOString(), projetos: S.projects, modelos: S.templates, reunioes: S.meetings, tarefas: S.tasksAll, diario: S.diary, relatorios: S.reports };
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
   a.download = `pandora-backup-${todayStr()}.json`;
@@ -1493,7 +1555,8 @@ const ACTIONS = {
   },
   'new-task': () => openTask(null),
   'open-task': (el) => openTask(el.dataset.id),
-  'complete-task': (el) => { const t = byId(S.tasks, el.dataset.id); setTaskStatus(t.id, isDone(t.status) ? 'Pendente' : 'Feito'); },
+  'task-view': (el) => { S.taskView = el.dataset.v; S.taskPerson = ''; render(false); },
+  'complete-task': (el) => { const t = byId(S.tasksAll, el.dataset.id); setTaskStatus(t.id, isDone(t.status) ? 'Pendente' : 'Feito'); },
   'task-delete': async (el) => {
     const ok = await confirmDialog('Excluir esta tarefa?', 'Excluir', true);
     if (!ok) return;
@@ -1550,7 +1613,7 @@ const ACTIONS = {
   'nb-add-task': async () => {
     const title = $('#na-title').value.trim();
     if (!title) { $('#na-title').focus(); return; }
-    await call(sb.from('tasks').insert({ title, due_date: $('#na-due').value || null, owner: $('#na-owner').value.trim() || null, status: 'Pendente', meeting_id: NB.m.id, project_id: NB.m.project_id || null }));
+    await call(sb.from('tasks').insert({ title, due_date: $('#na-due').value || null, ...resolveOwner($('#na-owner').value), status: 'Pendente', meeting_id: NB.m.id, project_id: NB.m.project_id || null }));
     await reload('tasks'); renderNbActions(); toast('Ação adicionada.');
   },
   'pal-kind': (el) => { P.kind = el.dataset.kind; P.sel = 0; $$('.pal-filters .chip').forEach((c) => c.classList.toggle('on', c === el)); paintPalette(); $('#pal-q').focus(); },
@@ -1584,7 +1647,7 @@ function qcBuild() {
       <form data-form="qc" autocomplete="off">
         <label class="qc-l">Captura rápida<input name="title" id="qc-title" placeholder="O que não pode ser esquecido?" required></label>
         <div class="qc-chips">${[['', 'Sem prazo'], ['hoje', 'Hoje'], ['amanha', 'Amanhã'], ['semana', 'Em 7 dias']].map(([v, l]) => `<button type="button" class="chip ${v === '' ? 'on' : ''}" data-act="qc-due" data-v="${v}">${l}</button>`).join('')}</div>
-        <div class="qc-row"><input name="owner" list="owners" placeholder="Responsável (opcional)" aria-label="Responsável"><button class="btn primary">Salvar</button></div>
+        <div class="qc-row"><input name="owner" list="owners" placeholder="Responsável (vazio = você)" aria-label="Responsável" autocomplete="off"><button class="btn primary">Salvar</button></div>
       </form>
     </div>
     <div class="qc-menu" id="qc-menu" role="menu" aria-label="Ações rápidas" hidden>
@@ -1656,7 +1719,7 @@ document.addEventListener('submit', async (e) => {
     } else if (kind === 'qc') {
       const title = String(f.get('title')).trim();
       if (!title) return;
-      await call(sb.from('tasks').insert({ title, due_date: qcDue(QC.due), owner: String(f.get('owner') || '').trim() || null, status: 'Pendente' }));
+      await call(sb.from('tasks').insert({ title, due_date: qcDue(QC.due), ...resolveOwner(f.get('owner')), status: 'Pendente' }));
       await reload('tasks'); refreshUI(); qcSet(false); toast('Anotado em Tarefas.');
     }
     else if (kind === 'project') {
@@ -1719,6 +1782,7 @@ document.addEventListener('change', (e) => {
   if (!b) return;
   const v = e.target.value;
   if (b === 'board-project') { S.boardProject = v; render(false); }
+  else if (b === 'board-person') { S.taskPerson = v; render(false); }
   else if (b === 'diary-date') { diarySaver.flush(); S.diarySel = v || todayStr(); render(false); }
   else if (b === 'ges-month') { S.gesMonth = v; render(false); }
   else if (b === 'tl-project') { S.tlProject = v; S.tlOpen = null; render(false); }
@@ -1786,7 +1850,7 @@ document.addEventListener('drop', (e) => {
   e.preventDefault();
   lane.classList.remove('over');
   const id = e.dataTransfer.getData('text/plain');
-  const t = byId(S.tasks, id);
+  const t = byId(S.tasksAll, id);
   if (t && t.status !== lane.dataset.status) setTaskStatus(id, lane.dataset.status);
 });
 
